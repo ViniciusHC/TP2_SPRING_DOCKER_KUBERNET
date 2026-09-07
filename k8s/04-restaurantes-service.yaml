@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: restaurantes-service
+  namespace: ecommerce
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: restaurantes-service
+  template:
+    metadata:
+      labels:
+        app: restaurantes-service
+    spec:
+      initContainers:
+        - name: espera-eureka
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z eureka-server 9080; do sleep 2; done']
+        - name: espera-config-server
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z config-server 9999; do sleep 2; done']
+      containers:
+        - name: restaurantes-service
+          image: restaurantes-service:1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9083
+          env:
+            - name: SPRING_CONFIG_IMPORT
+              value: "optional:configserver:http://config-server:9999"
+            - name: SPRING_PROFILES_ACTIVE
+              value: "docker"
+            - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+              value: "http://eureka-server:9080/eureka/"
+          readinessProbe:
+            tcpSocket: { port: 9083 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: restaurantes-service
+  namespace: ecommerce
+spec:
+  selector:
+    app: restaurantes-service
+  ports:
+    - port: 9083
+      targetPort: 9083
